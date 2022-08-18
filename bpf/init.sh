@@ -35,8 +35,8 @@ ID_WORLD=2
 
 # If the value below is changed, be sure to update bugtool/cmd/configuration.go
 # as well when dumping the routing table in bugtool. See GH-5828.
-PROXY_RT_TABLE=2005
-TO_PROXY_RT_TABLE=2004
+PROXY_RT_TABLE=3005
+TO_PROXY_RT_TABLE=3004
 
 set -e
 set -x
