@@ -65,6 +65,7 @@ func NewEndpointFromChangeModel(ctx context.Context, owner regeneration.Owner, p
 	}
 
 	ep := createEndpoint(owner, policyGetter, namedPortsGetter, proxy, allocator, uint16(base.ID), base.InterfaceName)
+	ep.netNS = base.NetNs
 	ep.ifIndex = int(base.InterfaceIndex)
 	ep.containerIfName = base.ContainerInterfaceName
 	ep.containerName = base.ContainerName

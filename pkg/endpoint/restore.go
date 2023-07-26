@@ -368,6 +368,7 @@ func (e *Endpoint) toSerializedEndpoint() *serializableEndpoint {
 		ContainerID:              e.containerID,
 		DockerNetworkID:          e.dockerNetworkID,
 		DockerEndpointID:         e.dockerEndpointID,
+		NetNS:                    e.netNS,
 		IfName:                   e.ifName,
 		IfIndex:                  e.ifIndex,
 		ContainerIfName:          e.containerIfName,
@@ -418,6 +419,9 @@ type serializableEndpoint struct {
 	// dockerEndpointID is the Docker network endpoint ID if managed by
 	// libnetwork
 	DockerEndpointID string
+
+	// netNS is the network namespace of interface, veth doesn't need this
+	NetNS string
 
 	// ifName is the name of the host facing interface (veth pair) which
 	// connects into the endpoint
@@ -525,6 +529,7 @@ func (ep *Endpoint) fromSerializedEndpoint(r *serializableEndpoint) {
 	ep.containerID = r.ContainerID
 	ep.dockerNetworkID = r.DockerNetworkID
 	ep.dockerEndpointID = r.DockerEndpointID
+	ep.netNS = r.NetNS
 	ep.ifName = r.IfName
 	ep.ifIndex = r.IfIndex
 	ep.containerIfName = r.ContainerIfName

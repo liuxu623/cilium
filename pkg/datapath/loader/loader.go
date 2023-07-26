@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/containernetworking/plugins/pkg/ns"
+
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 
@@ -396,22 +398,48 @@ func (l *Loader) reloadDatapath(ctx context.Context, ep datapath.Endpoint, dirs 
 			return err
 		}
 	} else {
-		progs := []progDefinition{{progName: symbolFromEndpoint, direction: dirIngress}}
+		var err error
+		var finalize func()
+		if ep.NetNS() == "" {
+			progs := []progDefinition{{progName: symbolFromEndpoint, direction: dirIngress}}
 
-		if ep.RequireEgressProg() {
-			progs = append(progs, progDefinition{progName: symbolToEndpoint, direction: dirEgress})
-		} else {
-			err := RemoveTCFilters(ep.InterfaceName(), netlink.HANDLE_MIN_EGRESS)
-			if err != nil {
-				log.WithField("device", ep.InterfaceName()).Error(err)
+			if ep.RequireEgressProg() {
+				progs = append(progs, progDefinition{progName: symbolToEndpoint, direction: dirEgress})
+			} else {
+				err := RemoveTCFilters(ep.InterfaceName(), netlink.HANDLE_MIN_EGRESS)
+				if err != nil {
+					log.WithField("device", ep.InterfaceName()).Error(err)
+				}
 			}
-		}
 
-		finalize, err := replaceDatapath(ctx, ep.InterfaceName(), objPath, progs, "")
+			finalize, err = replaceDatapath(ctx, ep.InterfaceName(), objPath, progs, "")
+		} else {
+			var netNS ns.NetNS
+			netNS, err = ns.GetNS(ep.NetNS())
+			if err != nil {
+				return fmt.Errorf("failed to open netns %q: %s", ep.NetNS(), err)
+			}
+			defer netNS.Close()
+			err = netNS.Do(func(_ ns.NetNS) error {
+				progs := []progDefinition{{progName: symbolFromEndpoint, direction: dirEgress}}
+
+				if ep.RequireEgressProg() {
+					progs = append(progs, progDefinition{progName: symbolToEndpoint, direction: dirIngress})
+				} else {
+					err = RemoveTCFilters(ep.InterfaceName(), netlink.HANDLE_MIN_INGRESS)
+					if err != nil {
+						log.WithField("device", ep.InterfaceName()).Error(err)
+					}
+				}
+
+				finalize, err = replaceDatapath(ctx, ep.InterfaceName(), objPath, progs, "")
+				return err
+			})
+		}
 		if err != nil {
 			scopedLog := ep.Logger(Subsystem).WithFields(logrus.Fields{
-				logfields.Path: objPath,
-				logfields.Veth: ep.InterfaceName(),
+				logfields.Path:   objPath,
+				logfields.Device: ep.InterfaceName(),
 			})
 			// Don't log an error here if the context was canceled or timed out;
 			// this log message should only represent failures with respect to
@@ -426,7 +454,7 @@ func (l *Loader) reloadDatapath(ctx context.Context, ep datapath.Endpoint, dirs 
 
 	if ep.RequireEndpointRoute() {
 		scopedLog := ep.Logger(Subsystem).WithFields(logrus.Fields{
-			logfields.Veth: ep.InterfaceName(),
+			logfields.Device: ep.InterfaceName(),
 		})
 		if ip := ep.IPv4Address(); ip.IsValid() {
 			if err := upsertEndpointRoute(ep, *iputil.AddrToIPNet(ip)); err != nil {
